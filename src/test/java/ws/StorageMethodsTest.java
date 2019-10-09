@@ -1,15 +1,13 @@
 package ws;
 
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.junit4.SpringRunner;
 import ws.storage.StorageInterface;
 
-import java.util.ArrayList;
+import java.util.Collection;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.*;
@@ -25,7 +23,7 @@ public class StorageMethodsTest {
     @Test
     public void save() {
         Widget widget = new Widget(0, 0, 1, 1, 1);
-        assertThat(storage.save(widget), is(true));
+        assertThat(storage.save(widget), notNullValue());
         assertThat(widget, is(storage.get(widget.getId())));
     }
 
@@ -46,7 +44,7 @@ public class StorageMethodsTest {
 
         storage.save(widget1);
         storage.save(widget2);
-        ArrayList<Widget> storedWidgets = storage.getAll();
+        Collection<Widget> storedWidgets = storage.getAll();
 
         // check values
         assertThat(storedWidgets, hasItems(widget1));
@@ -56,6 +54,6 @@ public class StorageMethodsTest {
         assertThat(storedWidgets, hasSize(2));
 
         // check order
-        assertThat(storedWidgets, containsInAnyOrder(widget1, widget2));
+        assertThat(storedWidgets, contains(widget1, widget2));
     }
 }

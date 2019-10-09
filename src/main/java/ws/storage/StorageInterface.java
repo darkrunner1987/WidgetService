@@ -2,21 +2,21 @@ package ws.storage;
 
 import ws.Widget;
 
-import java.util.ArrayList;
+import java.util.Collection;
 import java.util.UUID;
 
 public interface StorageInterface {
 
-    public Widget get(UUID id);
+    Widget get(UUID id);
 
-    public boolean save(Widget widget);
+    Widget save(Widget widget);
 
-    public boolean remove(UUID id);
+    Widget remove(UUID id);
 
     /**
-     * Returns sorted array of widgets.
+     * Returns ordered array of widgets.
      * @return ArrayList<Widget>
      */
-    public ArrayList<Widget> getAll();
+    Collection<Widget> getAll();
 
 }

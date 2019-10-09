@@ -1,6 +1,9 @@
 package ws;
 
 import org.springframework.stereotype.Component;
+import ws.exception.WidgetNotFoundException;
+import ws.storage.ConcurrentStorageProxy;
+import ws.storage.ConcurrentStorageInterface;
 import ws.storage.StorageInterface;
 
 import java.util.*;
@@ -8,10 +11,14 @@ import java.util.*;
 @Component
 public class WidgetDirector {
 
-    private StorageInterface storage;
+    private ConcurrentStorageInterface storage;
 
     WidgetDirector(StorageInterface storage) {
-        this.storage = storage;
+        if (storage instanceof ConcurrentStorageInterface) {
+            this.storage = (ConcurrentStorageInterface) storage;
+        } else {
+            this.storage = new ConcurrentStorageProxy(storage);
+        }
     }
 
     /**
@@ -19,8 +26,12 @@ public class WidgetDirector {
      * @param id Identifier of the widget
      * @return Widget
      */
-    public Widget get(UUID id) {
-        return this.storage.get(id);
+    public Widget get(UUID id) throws WidgetNotFoundException {
+        Widget widget = this.storage.get(id);
+        if (widget == null) {
+            throw new WidgetNotFoundException();
+        }
+        return widget;
     }
 
     /**
@@ -30,29 +41,8 @@ public class WidgetDirector {
      * @param widget Widget instance
      * @return Widget
      */
-    public synchronized Widget put(Widget widget) {
-        ArrayList<Widget> widgets = this.storage.getAll();
-
-        if (widget.getZIndex() == 0) {
-            long maxZIndex = 0;
-            for (Widget w: widgets) {
-                maxZIndex = Long.max(maxZIndex, w.getZIndex());
-            }
-            widget.setZIndex(maxZIndex + 1);
-        } else {
-            for (Widget w: widgets) {
-                if (w.getZIndex() >= widget.getZIndex()) {
-                    w.incrementZIndex();
-                    this.storage.save(w);
-                }
-            }
-        }
-
-        if (!this.storage.save(widget)) {
-            return null;
-        }
-
-        return widget;
+    public Widget put(Widget widget) {
+        return this.storage.save(widget);
     }
 
     /**
@@ -60,13 +50,18 @@ public class WidgetDirector {
      * @param id Identifier of the widget
      * @return boolean
      */
-    public synchronized boolean remove(UUID id) {
-        return this.storage.remove(id);
+    public boolean remove(UUID id) throws RuntimeException {
+        Widget widget = this.storage.get(id);
+        if (widget == null) {
+            throw new WidgetNotFoundException();
+        }
+        if (this.storage.remove(id) == null) {
+            throw new RuntimeException("Widget can not be deleted");
+        }
+        return true;
     }
 
-    public ArrayList<Widget> getAll() {
-        ArrayList<Widget> sortedList = this.storage.getAll();
-        Collections.sort(sortedList);
-        return sortedList;
+    public Collection<Widget> getAll() {
+        return this.storage.getAll();
     }
 }

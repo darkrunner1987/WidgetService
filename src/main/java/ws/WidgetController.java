@@ -4,7 +4,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import ws.exception.WidgetNotFoundException;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -17,17 +16,13 @@ public class WidgetController {
     }
 
     @GetMapping
-    public List<Widget> getAll() {
+    public Iterable<Widget> getAll() {
         return this.widgetDirector.getAll();
     }
 
     @RequestMapping("/{id}")
     public ResponseEntity<Widget> get(@PathVariable UUID id) throws WidgetNotFoundException {
         Widget widget = this.widgetDirector.get(id);
-        if (widget == null) {
-            throw new WidgetNotFoundException();
-        }
-
         return ResponseEntity.ok(widget);
     }
 
@@ -40,9 +35,6 @@ public class WidgetController {
     @PostMapping("/{id}")
     public ResponseEntity<Widget> update(@PathVariable UUID id, @RequestParam(value="x") long x, @RequestParam(value="y") long y, @RequestParam(value="width") long width, @RequestParam(value="height") long height, @RequestParam(value="zIndex") long zIndex) {
         Widget widget = this.widgetDirector.get(id);
-        if (widget == null) {
-            throw new WidgetNotFoundException();
-        }
         widget.setXY(x, y);
         widget.setWidth(width);
         widget.setHeight(height);
