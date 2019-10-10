@@ -8,12 +8,12 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 public class MemoryStorage implements ConcurrentStorageInterface {
     private ConcurrentHashMap<UUID, Widget> widgets = new ConcurrentHashMap<>();
     private ConcurrentSkipListMap<Long, Widget> zIndexMap = new ConcurrentSkipListMap<>();
-    private ConcurrentSkipListMap<Long, ReentrantReadWriteLock> zIndexLocks = new ConcurrentSkipListMap<>();
+    private NavigableMap<Long, ReentrantReadWriteLock> zIndexLocks = new ConcurrentSkipListMap<>();
     private final ReentrantReadWriteLock rwl = new ReentrantReadWriteLock();
     private final Lock r = rwl.readLock();
     private final Lock w = rwl.writeLock();
@@ -59,48 +59,74 @@ public class MemoryStorage implements ConcurrentStorageInterface {
     }
 
     private void shiftUpperWidgets(Widget widget) {
-        BiConsumer<Long, Widget> shiftWidget = (Long i, Widget w) -> {
-            zIndexMap.remove(i);
-            w.incrementZIndex();
-            zIndexMap.put(w.getZIndex(), w);
+        Consumer<NavigableMap<Long, Widget>> shiftWidgets = (NavigableMap<Long, Widget> map) -> {
+            Iterator<Map.Entry<Long, Widget>> iterator = map.entrySet().iterator();
+            Widget prevWidget = null;
+            while (iterator.hasNext()) {
+                Map.Entry<Long, Widget> entry = iterator.next();
+                Widget currWidget = entry.getValue();
+                if (prevWidget == null) {
+                    iterator.remove();
+                } else {
+                    map.put(currWidget.getZIndex(), prevWidget);
+                }
+                prevWidget = currWidget;
+                prevWidget.incrementZIndex();
+            }
+            if (prevWidget != null) {
+                zIndexMap.put(prevWidget.getZIndex(), prevWidget);
+            }
         };
 
         ReentrantReadWriteLock zIndexLock;
+        // get current zIndex lock
         r.unlock();
         w.lock();
         try {
-            // get current zIndex lock
             zIndexLock = zIndexLocks.computeIfAbsent(widget.getZIndex(), (key) -> new ReentrantReadWriteLock(true));
             r.lock();
         } finally {
             w.unlock();
         }
 
+        Map.Entry<Long, ReentrantReadWriteLock> lowerLockEntry = zIndexLocks.lowerEntry(widget.getZIndex());
+        if (lowerLockEntry != null) {
+            lowerLockEntry.getValue().readLock().lock();
+        }
         zIndexLock.writeLock().lock();
         try {
-            Long higherLockKey = zIndexLocks.higherKey(widget.getZIndex());
+            Long higherLockKey = zIndexLocks.ceilingKey(widget.getZIndex());
             if (higherLockKey != null) {
-                zIndexMap.subMap(widget.getZIndex(), true, higherLockKey, false).descendingMap().forEach(shiftWidget);
+                shiftWidgets.accept(zIndexMap.subMap(widget.getZIndex(), true, higherLockKey, false));
 
                 ReentrantReadWriteLock higherLock = zIndexLocks.get(higherLockKey);
-                System.out.printf("%d, %d - %b\n", widget.getZIndex(), higherLockKey, higherLock.isWriteLocked());
+//                System.out.printf("%d, %d - %b\n", widget.getZIndex(), higherLockKey, higherLock.isWriteLocked());
 
-                zIndexLock.writeLock().unlock();
-                higherLock.writeLock().lock();
+                higherLock.readLock().lock();
                 try {
-                    zIndexMap.tailMap(higherLockKey, true).descendingMap().forEach(shiftWidget);
+                    shiftWidgets.accept(zIndexMap.tailMap(higherLockKey, true));
                 } finally {
-                    higherLock.writeLock().unlock();
+                    higherLock.readLock().unlock();
                 }
-                zIndexLock.writeLock().lock();
             } else {
-                zIndexMap.tailMap(widget.getZIndex(), true).descendingMap().forEach(shiftWidget);
+                shiftWidgets.accept(zIndexMap.tailMap(widget.getZIndex(), true));
             }
 
-            widgets.put(widget.getId(), widget);
             zIndexMap.put(widget.getZIndex(), widget);
         } finally {
             zIndexLock.writeLock().unlock();
+            if (lowerLockEntry != null) {
+                lowerLockEntry.getValue().readLock().unlock();
+            }
+        }
+
+        r.unlock();
+        w.lock();
+        try {
+            widgets.put(widget.getId(), widget);
+            r.lock();
+        } finally {
+            w.unlock();
         }
     }
 
@@ -123,8 +149,8 @@ public class MemoryStorage implements ConcurrentStorageInterface {
         try {
             return zIndexMap.values();
         } finally {
-            r.unlock();
             zIndexLocks.forEach((i, lock) -> lock.readLock().unlock());
+            r.unlock();
         }
     }
 }

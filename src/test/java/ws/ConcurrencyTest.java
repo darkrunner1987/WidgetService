@@ -186,7 +186,7 @@ public class ConcurrencyTest {
             widgetDirector.put(new Widget(1, 1, 1, 1));
         }
 
-        ArrayList<Future<ArrayList<Long>>> futures = new ArrayList<>(threadCount);
+        ArrayList<Future<ArrayList<Widget>>> futures = new ArrayList<>(threadCount);
 
         AtomicBoolean writing = new AtomicBoolean();
         AtomicInteger writeOverlaps = new AtomicInteger();
@@ -200,21 +200,22 @@ public class ConcurrencyTest {
                 widgetDirector.put(new Widget(1, 1, 1, 1, zIndex));
                 writing.set(false);
 
-                ArrayList<Long> zIndexes = new ArrayList<>();
+                ArrayList<Object> zIndexes = new ArrayList<>();
                 for (Widget w : widgetDirector.getAll()) {
-                    zIndexes.add(w.getZIndex());
+                    zIndexes.add(w);
                 }
                 return zIndexes;
             })));
         }
         latch.countDown();
-        for (Future<ArrayList<Long>> f : futures) {
+        for (Future<ArrayList<Widget>> f : futures) {
             f.get();
-            ArrayList<Long> zIndexes = f.get();
+            ArrayList<Widget> zIndexes = f.get();
 //            System.out.println(zIndexes.size());
             for (int i = 0; i < zIndexes.size() - 1; i++) {
-                assertThat(zIndexes.get(i), lessThan(zIndexes.get(i + 1)));
-//                System.out.printf("%s,", zIndexes.get(i));
+//                System.out.printf("%s,", zIndexes.get(i).getZIndex());
+//                System.out.printf("%s,", zIndexes.get(i + 1).getId());
+                assertThat(zIndexes.get(i).getZIndex(), lessThan(zIndexes.get(i + 1).getZIndex()));
             }
 //            System.out.println();
         }
@@ -223,9 +224,5 @@ public class ConcurrencyTest {
 
         System.out.printf("Parallel threads: %d\n", overlaps.get());
         System.out.printf("Parallel writes: %d\n", threadCount - writeOverlaps.get());
-
-        for (Widget w : widgetDirector.getAll()) {
-            System.out.printf("%s,", w.getZIndex());
-        }
     }
 }
